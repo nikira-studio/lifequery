@@ -80,7 +80,7 @@ export function DataTab() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [telegramStatus, setTelegramStatus] = useState<
-    "uninitialized" | "needs_auth" | "phone_sent" | "connected"
+    "uninitialized" | "needs_auth" | "phone_sent" | "connected" | "error"
   >("uninitialized");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const reindexConfirmRef = useRef<HTMLDialogElement>(null);
@@ -109,33 +109,25 @@ export function DataTab() {
   useEffect(() => {
     const loadAll = async () => {
       setChatsLoading(true);
+      setStatsLoading(true);
+
+      // Fetch all items; each updates state independently to prevent blocking
+      const promises = [
+        fetchStats().then(setStats).catch(e => console.error("Stats fetch failed:", e)),
+        fetchSyncLogs(10).then(setSyncLogs).catch(e => console.error("Logs fetch failed:", e)),
+        getTelegramStatus().then(data => setTelegramStatus(data.state)).catch(e => console.error("Telegram status fetch failed:", e)),
+        fetchChats().then(data => setChats(data.chats)).catch(e => console.error("Chats fetch failed:", e)).finally(() => setChatsLoading(false)),
+        fetchScannedImports().then(data => {
+          setScannedFiles(data.files);
+          setScannedDir(data.directory);
+        }).catch(e => console.error("Scanned imports fetch failed:", e)),
+        fetchPendingStats().then(setPendingStats).catch(e => console.error("Pending stats fetch failed:", e))
+      ];
+
       try {
-        const [statsData, logsData, statusData, chatsData, scannedData, pendingData] =
-          await Promise.all([
-            fetchStats(),
-            fetchSyncLogs(10),
-            getTelegramStatus(),
-            fetchChats(),
-            fetchScannedImports(),
-            fetchPendingStats(),
-          ]);
-        setStats(statsData);
-        setSyncLogs(logsData);
-        setTelegramStatus(statusData.state);
-        setChats(chatsData.chats);
-        setScannedFiles(scannedData.files);
-        setScannedDir(scannedData.directory);
-        setPendingStats(pendingData);
+        await Promise.allSettled(promises);
       } catch (err) {
-        console.error("Failed to fetch initial data:", err);
-        toast({
-          title: "Failed to load data",
-          description:
-            err instanceof Error
-              ? err.message
-              : "Could not connect to the backend",
-          variant: "destructive",
-        });
+        console.error("Critical failure during loadAll:", err);
       } finally {
         setStatsLoading(false);
         setChatsLoading(false);
@@ -170,15 +162,13 @@ export function DataTab() {
 
   const refreshStats = async () => {
     try {
-      const [data, pendingData] = await Promise.all([fetchStats(), fetchPendingStats()]);
-      setStats(data);
-      setPendingStats(pendingData);
+      fetchStats().then(setStats).catch(e => console.error("Refresh stats failed:", e));
+      fetchPendingStats().then(setPendingStats).catch(e => console.error("Refresh pending stats failed:", e));
     } catch (err) {
-      console.error("Failed to refresh stats:", err);
+      console.error("Failed to trigger refresh stats:", err);
       toast({
         title: "Failed to refresh stats",
-        description:
-          err instanceof Error ? err.message : "An unexpected error occurred",
+        description: err instanceof Error ? err.message : "An unexpected error occurred",
         variant: "destructive",
       });
     }

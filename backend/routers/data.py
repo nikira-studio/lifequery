@@ -425,11 +425,12 @@ async def get_pending_stats() -> dict:
         # but for which we haven't recently calculated a chunk coverage.
         # Actually, our chunker just re-scans everything and skips existing.
         # So we'll approximate 'pending' as 'newly imported messages'.
+        # Messages needing chunking: Any message whose chat_id has no entries in the chunks table yet.
+        # This avoids massive joins on chat_id.
         row = await fetch_one(
-            """SELECT COUNT(m.id) as count 
+            """SELECT COUNT(*) as count 
                FROM messages m
-               LEFT JOIN chunks ck ON m.chat_id = ck.chat_id
-               WHERE ck.id IS NULL"""
+               WHERE NOT EXISTS (SELECT 1 FROM chunks ck WHERE ck.chat_id = m.chat_id)"""
         )
         unchunked = row["count"] if row else 0
 
