@@ -478,8 +478,8 @@ export function DataTab() {
       (chatsFilter === "excluded" && !chat.included);
 
     const matchesSearch =
-      chat.chat_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      chat.chat_id.includes(searchQuery);
+      (chat.chat_name || "Unknown").toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (chat.chat_id || "").includes(searchQuery);
 
     return matchesFilter && matchesSearch;
   });
@@ -580,9 +580,9 @@ export function DataTab() {
                 Pending Processing
               </p>
               <p className="text-xs text-amber-500/70 mt-0.5 leading-relaxed">
-                Found {pendingStats.unchunked_messages > 0 && `${pendingStats.unchunked_messages} new messages`}
-                {pendingStats.unchunked_messages > 0 && pendingStats.unembedded_chunks > 0 && " and "}
-                {pendingStats.unembedded_chunks > 0 && `${pendingStats.unembedded_chunks} chunks`} waiting to be processed.
+                Found {pendingStats?.unchunked_messages ? `${pendingStats.unchunked_messages} new messages` : ""}
+                {pendingStats?.unchunked_messages && pendingStats.unembedded_chunks ? " and " : ""}
+                {pendingStats?.unembedded_chunks ? `${pendingStats.unembedded_chunks} chunks` : ""} waiting to be processed.
               </p>
             </div>
           </div>
@@ -780,7 +780,7 @@ export function DataTab() {
                         <div className="min-w-0">
                           <div className="flex items-center gap-2">
                             <p className="font-medium text-foreground text-sm truncate">
-                              {chat.chat_name}
+                              {chat.chat_name || "Unknown Chat"}
                             </p>
                             {!chat.included && (
                               <span className="flex-shrink-0 px-1.5 py-0.5 rounded text-xs bg-muted text-muted-foreground">
@@ -789,7 +789,7 @@ export function DataTab() {
                             )}
                           </div>
                           <p className="text-xs text-muted-foreground mt-0.5">
-                            {chat.message_count.toLocaleString()} messages
+                            {(chat.message_count || 0).toLocaleString()} messages
                           </p>
                         </div>
                       </div>
