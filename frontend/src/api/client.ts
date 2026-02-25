@@ -88,7 +88,10 @@ export async function* apiStream(
     for (const line of lines) {
       const event = parseSseLine(line.trim());
       if (event) {
-        if (event.type === "done") return;
+        if (event.type === "done") {
+          yield event;
+          return;
+        }
         yield event;
       }
     }
