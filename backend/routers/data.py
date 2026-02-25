@@ -427,10 +427,17 @@ async def get_pending_stats() -> dict:
         # So we'll approximate 'pending' as 'newly imported messages'.
         # Messages needing chunking: Any message whose chat_id has no entries in the chunks table yet.
         # This avoids massive joins on chat_id.
+        # Optimize: Instead of checking every message, check if the chat has any messages but 0 chunks.
+        # This is incredibly fast compared to NOT EXISTS on the messages table directly.
         row = await fetch_one(
-            """SELECT COUNT(*) as count 
-               FROM messages m
-               WHERE NOT EXISTS (SELECT 1 FROM chunks ck WHERE ck.chat_id = m.chat_id)"""
+            """
+            SELECT SUM(m.count) as count FROM (
+                SELECT COUNT(id) as count, chat_id 
+                FROM messages 
+                GROUP BY chat_id 
+                HAVING (SELECT COUNT(*) FROM chunks WHERE chunks.chat_id = messages.chat_id) = 0
+            ) m
+            """
         )
         unchunked = row["count"] if row else 0
 
