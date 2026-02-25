@@ -366,29 +366,30 @@ async def sync_chats() -> EventSourceResponse:
 async def get_stats() -> StatsResponse:
     """Get database statistics."""
     try:
-        # Message count
-        row = await fetch_one("SELECT COUNT(*) as count FROM messages")
-        message_count = row["count"] if row else 0
+        # Use pre-calculated message and chat counts to avoid full message table scans
+        row = await fetch_one(
+            """
+            SELECT 
+                SUM(message_count) as total_messages,
+                COUNT(*) as total_chats,
+                SUM(CASE WHEN included = 1 THEN 1 ELSE 0 END) as included_chats,
+                SUM(CASE WHEN included = 0 THEN 1 ELSE 0 END) as excluded_chats
+            FROM chats
+            """
+        )
+        
+        message_count = row["total_messages"] if row and row["total_messages"] else 0
+        chat_count = row["total_chats"] if row else 0
+        included_chat_count = row["included_chats"] if row else 0
+        excluded_chat_count = row["excluded_chats"] if row else 0
 
-        # Chunk count
+        # Chunk count (this table is usually smaller than messages, but still check)
         row = await fetch_one("SELECT COUNT(*) as count FROM chunks")
         chunk_count = row["count"] if row else 0
 
         # Embedded count
         row = await fetch_one("SELECT COUNT(*) as count FROM chunks WHERE embedded_at IS NOT NULL")
         embedded_count = row["count"] if row else 0
-
-        # Chat count (unique chats in database)
-        row = await fetch_one("SELECT COUNT(*) as count FROM chats")
-        chat_count = row["count"] if row else 0
-
-        # Included chat count
-        row = await fetch_one("SELECT COUNT(*) as count FROM chats WHERE included = 1")
-        included_chat_count = row["count"] if row else 0
-
-        # Excluded chat count
-        row = await fetch_one("SELECT COUNT(*) as count FROM chats WHERE included = 0")
-        excluded_chat_count = row["count"] if row else 0
 
         # Last sync info
         row = await fetch_one(
@@ -427,16 +428,14 @@ async def get_pending_stats() -> dict:
         # So we'll approximate 'pending' as 'newly imported messages'.
         # Messages needing chunking: Any message whose chat_id has no entries in the chunks table yet.
         # This avoids massive joins on chat_id.
-        # Optimize: Instead of checking every message, check if the chat has any messages but 0 chunks.
-        # This is incredibly fast compared to NOT EXISTS on the messages table directly.
+        # Accurate: Count messages newer than the last chunked timestamp
         row = await fetch_one(
             """
-            SELECT SUM(m.count) as count FROM (
-                SELECT COUNT(id) as count, chat_id 
-                FROM messages 
-                GROUP BY chat_id 
-                HAVING (SELECT COUNT(*) FROM chunks WHERE chunks.chat_id = messages.chat_id) = 0
-            ) m
+            SELECT COUNT(m.id) as count 
+            FROM messages m
+            JOIN chats c ON m.chat_id = c.chat_id
+            WHERE c.included = 1 
+            AND m.timestamp > IFNULL(c.last_chunked_at, 0)
             """
         )
         unchunked = row["count"] if row else 0

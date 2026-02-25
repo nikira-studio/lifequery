@@ -387,6 +387,14 @@ async def chunk_messages_streaming() -> AsyncGenerator[dict, None]:
                             "message": f"Processing {chat_name}: Created {i} chunks...",
                         }
 
+                # Update last_chunked_at for this chat so we don't process these messages again
+                if messages:
+                    last_ts = messages[-1]["timestamp"]
+                    await db.execute(
+                        "UPDATE chats SET last_chunked_at = ? WHERE chat_id = ?",
+                        (last_ts, chat_id)
+                    )
+
                 await db.commit()
             finally:
                 await db.close()

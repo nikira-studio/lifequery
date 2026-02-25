@@ -12,6 +12,7 @@ import {
   X,
   Loader2,
 } from "lucide-react";
+import ErrorBoundary from "@/components/ErrorBoundary";
 
 type Tab = "chat" | "data" | "settings";
 
@@ -49,11 +50,10 @@ export default function Index() {
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
-                  activeTab === tab.id
-                    ? "bg-card text-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${activeTab === tab.id
+                  ? "bg-card text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+                  }`}
               >
                 <Icon className="w-4 h-4" />
                 <span className="hidden sm:inline">{tab.label}</span>
@@ -88,21 +88,25 @@ export default function Index() {
 
       <main className="flex-1 overflow-hidden">
         <div className={`h-full ${activeTab === "chat" ? "" : "hidden"}`}>
-          <ChatTab />
+          <ErrorBoundary>
+            <ChatTab />
+          </ErrorBoundary>
         </div>
         <div
-          className={`h-full overflow-y-auto ${
-            activeTab === "data" ? "" : "hidden"
-          }`}
+          className={`h-full overflow-y-auto ${activeTab === "data" ? "" : "hidden"
+            }`}
         >
-          <DataTab />
+          <ErrorBoundary>
+            <DataTab />
+          </ErrorBoundary>
         </div>
         <div
-          className={`h-full overflow-y-auto ${
-            activeTab === "settings" ? "" : "hidden"
-          }`}
+          className={`h-full overflow-y-auto ${activeTab === "settings" ? "" : "hidden"
+            }`}
         >
-          <SettingsTab />
+          <ErrorBoundary>
+            <SettingsTab />
+          </ErrorBoundary>
         </div>
       </main>
     </div>
