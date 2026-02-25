@@ -40,8 +40,16 @@ export async function updateChat(
   });
 }
 
-export async function deleteChat(chatId: string): Promise<void> {
-  await apiFetch(`/chats/${chatId}`, { method: "DELETE" });
+export async function deleteChat(chatId: string): Promise<{
+  ok: boolean;
+  messages_deleted: number;
+  chunks_deleted: number;
+}> {
+  return apiFetch<{
+    ok: boolean;
+    messages_deleted: number;
+    chunks_deleted: number;
+  }>(`/chats/${chatId}`, { method: "DELETE" });
 }
 
 export async function* syncChats(

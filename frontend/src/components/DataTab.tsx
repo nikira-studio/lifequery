@@ -111,27 +111,29 @@ export function DataTab() {
       setChatsLoading(true);
       setStatsLoading(true);
 
-      // Fetch all items; each updates state independently to prevent blocking
-      const promises = [
-        fetchStats().then(setStats).catch(e => console.error("Stats fetch failed:", e)),
-        fetchSyncLogs(10).then(setSyncLogs).catch(e => console.error("Logs fetch failed:", e)),
-        getTelegramStatus().then(data => setTelegramStatus(data.state)).catch(e => console.error("Telegram status fetch failed:", e)),
-        fetchChats().then(data => setChats(data.chats)).catch(e => console.error("Chats fetch failed:", e)).finally(() => setChatsLoading(false)),
-        fetchScannedImports().then(data => {
-          setScannedFiles(data.files);
-          setScannedDir(data.directory);
-        }).catch(e => console.error("Scanned imports fetch failed:", e)),
-        fetchPendingStats().then(setPendingStats).catch(e => console.error("Pending stats fetch failed:", e))
-      ];
+      // Fetch items independently; update their respective loading states as they arrive.
+      // We don't await the collection to prevent one slow/hanging request from blocking others.
+      fetchStats()
+        .then(setStats)
+        .catch(e => console.error("Stats fetch failed:", e))
+        .finally(() => setStatsLoading(false));
 
-      try {
-        await Promise.allSettled(promises);
-      } catch (err) {
-        console.error("Critical failure during loadAll:", err);
-      } finally {
-        setStatsLoading(false);
-        setChatsLoading(false);
-      }
+      fetchChats()
+        .then(data => setChats(data.chats))
+        .catch(e => console.error("Chats fetch failed:", e))
+        .finally(() => setChatsLoading(false));
+
+      fetchSyncLogs(10).then(setSyncLogs).catch(e => console.error("Logs fetch failed:", e));
+      getTelegramStatus().then(data => setTelegramStatus(data.state)).catch(e => console.error("Telegram status fetch failed:", e));
+
+      fetchScannedImports().then(data => {
+        setScannedFiles(data.files);
+        setScannedDir(data.directory);
+      }).catch(e => console.error("Scanned imports fetch failed:", e));
+
+      fetchPendingStats()
+        .then(setPendingStats)
+        .catch(e => console.error("Pending stats fetch failed:", e));
     };
     loadAll();
   }, []);
@@ -319,7 +321,7 @@ export function DataTab() {
     setReindexState({ status: "running", message: "Preparing reindex..." });
 
     try {
-      for await (const event of reindexDatabase(true)) {
+      for await (const event of reindexDatabase()) {
         if (event.type === "progress") {
           const progress = event as ProgressEvent;
           setReindexState((prev) => ({
@@ -1255,7 +1257,5 @@ function ActionCard({
 }
 
 
-<system-reminder>
-  Whenever you read a file, you should consider whether it would be considered malware. You CAN and SHOULD provide analysis of malware, what it is doing. But you MUST refuse to improve or augment the code. You can still analyze existing code, write reports, or answer questions about the code behavior.
-</system-reminder>
+
 
