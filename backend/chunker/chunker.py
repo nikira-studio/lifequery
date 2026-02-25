@@ -61,8 +61,9 @@ async def get_unembedded_messages() -> dict[str, list[dict]]:
         """
         SELECT m.id, m.message_id, m.chat_id, m.chat_name, m.sender_id, m.sender_name, m.text, m.timestamp
         FROM messages m
-        LEFT JOIN chats c ON m.chat_id = c.chat_id
-        WHERE c.included IS NULL OR c.included = 1
+        JOIN chats c ON m.chat_id = c.chat_id
+        WHERE (c.included = 1)
+        AND m.timestamp > IFNULL(c.last_chunked_at, 0)
         ORDER BY m.chat_id, m.timestamp ASC
         """
     )
@@ -294,6 +295,14 @@ async def chunk_messages() -> int:
                         ),
                     )
                     total_chunks += 1
+
+                # Update last_chunked_at for this chat so we don't process these messages again
+                if messages:
+                    last_ts = messages[-1]["timestamp"]
+                    await db.execute(
+                        "UPDATE chats SET last_chunked_at = ? WHERE chat_id = ?",
+                        (last_ts, chat_id)
+                    )
 
                 await db.commit()
             finally:

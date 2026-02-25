@@ -109,6 +109,7 @@ CREATE TABLE IF NOT EXISTS chats (
     included INTEGER DEFAULT 1,
     message_count INTEGER DEFAULT 0,
     last_message_at INTEGER,
+    last_chunked_at INTEGER DEFAULT 0,
     created_at INTEGER NOT NULL
 );
 CREATE TABLE IF NOT EXISTS providers (
@@ -365,12 +366,21 @@ async def init_db() -> None:
                     included INTEGER DEFAULT 1,
                     message_count INTEGER DEFAULT 0,
                     last_message_at INTEGER,
+                    last_chunked_at INTEGER DEFAULT 0,
                     created_at INTEGER NOT NULL
                 )
             """)
-            logger.info("Created chats table")
+            logger.info("Created or verified chats table")
         except Exception as e:
             logger.warning(f"Could not create chats table: {e}")
+
+        # Migration: add last_chunked_at column to existing chats table
+        try:
+            await db.execute("ALTER TABLE chats ADD COLUMN last_chunked_at INTEGER DEFAULT 0")
+            logger.info("Added last_chunked_at column to chats table")
+        except Exception as e:
+            if "duplicate column" not in str(e).lower():
+                logger.warning(f"Could not add last_chunked_at column: {e}")
 
         await db.commit()
     finally:
