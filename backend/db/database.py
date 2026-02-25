@@ -382,6 +382,20 @@ async def init_db() -> None:
             if "duplicate column" not in str(e).lower():
                 logger.warning(f"Could not add last_chunked_at column: {e}")
 
+        # Migration: Seed last_chunked_at for already processed chats
+        try:
+            # One-time catch-up: If a chat already has chunks, mark its last_chunked_at 
+            # as the timestamp of its latest message so the UI doesn't think they are 'new'.
+            await db.execute("""
+                UPDATE chats 
+                SET last_chunked_at = (SELECT MAX(timestamp) FROM messages WHERE messages.chat_id = chats.chat_id)
+                WHERE (last_chunked_at IS NULL OR last_chunked_at = 0)
+                AND EXISTS (SELECT 1 FROM chunks WHERE chunks.chat_id = chats.chat_id)
+            """)
+            logger.info("Seeded last_chunked_at for existing processed chats")
+        except Exception as e:
+            logger.warning(f"Could not seed last_chunked_at column: {e}")
+
         await db.commit()
     finally:
         await db.close()
