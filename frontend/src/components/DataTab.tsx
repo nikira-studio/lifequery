@@ -527,9 +527,7 @@ export function DataTab() {
       <div className="grid grid-cols-3 gap-4">
         <div className="bg-card border border-border rounded-lg p-4 text-center">
           <p className="text-2xl font-mono font-bold text-foreground">
-            {statsLoading
-              ? "..."
-              : stats?.message_count.toLocaleString() || "0"}
+            {statsLoading ? "..." : stats?.message_count?.toLocaleString() || "0"}
           </p>
           <p className="text-xs text-muted-foreground mt-1 uppercase tracking-wider">
             Messages
@@ -537,17 +535,17 @@ export function DataTab() {
         </div>
         <div className="bg-card border border-border rounded-lg p-4 text-center">
           <p className="text-2xl font-mono font-bold text-foreground">
-            {statsLoading ? "..." : stats?.chunk_count.toLocaleString() || "0"}
+            {statsLoading ? "..." : stats?.chunk_count?.toLocaleString() || "0"}
           </p>
           <div className="flex items-center justify-center gap-2 mt-1">
             <span className="text-[10px] text-success font-medium uppercase tracking-wider">
-              {statsLoading ? "..." : stats?.embedded_count.toLocaleString() || "0"} Embedded
+              {statsLoading ? "..." : stats?.embedded_count?.toLocaleString() || "0"} Embedded
             </span>
           </div>
         </div>
         <div className="bg-card border border-border rounded-lg p-4 text-center">
           <p className="text-2xl font-mono font-bold text-foreground">
-            {statsLoading ? "..." : stats?.chat_count.toLocaleString() || "0"}
+            {statsLoading ? "..." : stats?.chat_count?.toLocaleString() || "0"}
           </p>
           <div className="flex items-center justify-center gap-2 mt-1">
             <span className="text-[10px] text-success font-medium">
