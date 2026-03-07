@@ -458,3 +458,67 @@ async def fetch_all(query: str, params: tuple = ()) -> list[dict]:
         return [dict(zip(columns, row)) for row in rows]
     finally:
         await db.close()
+
+
+# ============================================================================
+# RAG-Aware Listener Helpers
+# ============================================================================
+
+async def update_message_if_unchunked(message_id: str, chat_id: str, new_text: str, timestamp: int) -> bool:
+    """Update a message only if it hasn't been chunked for RAG yet.
+    
+    Returns:
+        True if the message was updated, False if it was already chunked or doesn't exist.
+    """
+    chat_info = await fetch_one("SELECT last_chunked_at FROM chats WHERE chat_id = ?", (chat_id,))
+    last_chunked_at = chat_info["last_chunked_at"] if chat_info else 0
+    
+    if timestamp <= last_chunked_at:
+        logger.debug(f"Ignoring edit for msg {message_id} in {chat_id} (already chunked)")
+        return False
+        
+    db = await get_connection()
+    try:
+        cursor = await db.execute(
+            """UPDATE messages SET text = ? WHERE message_id = ? AND chat_id = ? AND timestamp > ?""",
+            (new_text, message_id, chat_id, last_chunked_at)
+        )
+        await db.commit()
+        updated = cursor.rowcount > 0
+        if updated:
+            logger.info(f"Updated unchunked message {message_id} in {chat_id}")
+        return updated
+    finally:
+        await db.close()
+
+async def delete_messages_if_unchunked(chat_id: str, message_ids: list[str]) -> int:
+    """Delete messages only if they haven't been chunked for RAG yet.
+    
+    Returns:
+        Number of messages actually deleted.
+    """
+    if not message_ids:
+        return 0
+        
+    chat_info = await fetch_one("SELECT last_chunked_at FROM chats WHERE chat_id = ?", (chat_id,))
+    last_chunked_at = chat_info["last_chunked_at"] if chat_info else 0
+    
+    placeholders = ",".join(["?"] * len(message_ids))
+    params = message_ids + [chat_id, last_chunked_at]
+    
+    db = await get_connection()
+    try:
+        cursor = await db.execute(
+            f"""DELETE FROM messages 
+                WHERE message_id IN ({placeholders}) 
+                AND chat_id = ? 
+                AND timestamp > ?""",
+            params
+        )
+        await db.commit()
+        deleted = cursor.rowcount
+        if deleted > 0:
+            logger.info(f"Deleted {deleted} unchunked messages in {chat_id}")
+        return deleted
+    finally:
+        await db.close()

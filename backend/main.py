@@ -50,11 +50,16 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.warning(f"Could not verify initial database stats: {e}")
             
-        # Start background scheduler
+        # Start background schedule sync task
         app.state.auto_sync_task = asyncio.create_task(auto_sync_worker())
+        
+        # Start real-time Telegram listener
+        from telegram.telethon_listener import start_listener
+        start_listener()
+        
         logger.info("LifeQuery backend started successfully")
     except Exception as e:
-        logger.error(f"CRITICAL: Backend failed to initialize database: {e}")
+        logger.error(f"CRITICAL: Backend failed to initialize: {e}")
         # We allow the app to continue so the frontend can receive a 503/Error
         # and display it to the user instead of a connection timeout.
 
@@ -62,6 +67,10 @@ async def lifespan(app: FastAPI):
 
     # Shutdown cleanup
     logger.info("Shutting down LifeQuery backend...")
+    
+    from telegram.telethon_listener import stop_listener
+    await stop_listener()
+    
     if hasattr(app.state, "auto_sync_task"):
         app.state.auto_sync_task.cancel()
         try:
