@@ -24,6 +24,11 @@ export interface CitationsEvent extends SseEvent {
   citations: Citation[];
 }
 
+export interface ErrorEvent extends SseEvent {
+  type: "error";
+  message: string;
+}
+
 export interface DebugEvent extends SseEvent {
   type: "debug";
   messages: ChatMessage[];
@@ -40,6 +45,11 @@ export async function* streamChat(
   signal?: AbortSignal,
 ): AsyncGenerator<TokenEvent | CitationsEvent | DebugEvent> {
   for await (const event of apiStream("/chat", { messages }, signal)) {
+    if (event.type === "error") {
+      const errorEvent = event as ErrorEvent;
+      throw new Error(errorEvent.message || "An unknown stream error occurred");
+    }
+
     if (
       event.type === "token" ||
       event.type === "citations" ||
