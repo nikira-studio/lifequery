@@ -8,7 +8,13 @@ from telethon import TelegramClient, events
 from telethon.sessions import StringSession
 
 from config import settings
-from db.database import fetch_all, update_message_if_unchunked, delete_messages_if_unchunked
+from db.database import (
+    execute_fetchone,
+    execute_write,
+    fetch_all,
+    update_message_if_unchunked,
+    delete_messages_if_unchunked,
+)
 from telegram.telethon_sync import (
     _derive_chat_type,
     _derive_sender_name,
@@ -62,18 +68,16 @@ async def _handle_new_message(event) -> None:
             source="telegram_listener"
         )
         if inserted:
-            # We don't want to recount the entire messages table on every single live message
-            # for performance, so we just bump the last_message_at timestamp directly.
-            # Using _update_chat_entry will force a recount anyway in the current sync loop, 
-            # so we let it be for now since it is rare to get hundreds of messages a second.
-            from db.database import execute_fetchone
-            row = await execute_fetchone("SELECT COUNT(*) FROM messages WHERE chat_id = ?", (chat_id,))
-            msg_count = row[0] if row else 0
-            
-            from db.database import execute_write
+            # Keep the chat message count roughly in sync without recounting the
+            # whole table on every message. This avoids a read-heavy hot path.
+            row = await execute_fetchone(
+                "SELECT message_count FROM chats WHERE chat_id = ?",
+                (chat_id,),
+            )
+            current_count = int(row[0]) if row and row[0] is not None else 0
             await execute_write(
                 "UPDATE chats SET message_count = ?, last_message_at = ? WHERE chat_id = ?",
-                (msg_count, timestamp, chat_id)
+                (current_count + 1, timestamp, chat_id),
             )
     except Exception as e:
         logger.error(f"Listener Error [NewMessage]: {e}")

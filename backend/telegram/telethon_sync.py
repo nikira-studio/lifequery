@@ -485,12 +485,59 @@ async def sync_telegram_messages(
 
                 chat_messages = 0
                 last_timestamp = 0
+                # Keep the in-memory working set small even if the configured fetch
+                # batch is large. This avoids holding a whole dialog in memory.
+                write_batch_size = min(max(1, settings.telegram_fetch_batch), 250)
 
                 try:
                     from db.database import _write_lock
 
-                    # Fetch from Telegram first (network I/O), outside the DB lock
-                    fetched = []
+                    # Stream messages from Telegram and flush them to SQLite in small
+                    # batches so we never retain a full dialog in memory.
+                    fetched_batch = []
+
+                    async def flush_batch(batch: list) -> None:
+                        nonlocal chat_messages, last_timestamp, total_messages, skipped_duplicate
+
+                        if not batch:
+                            return
+
+                        async with _write_lock:
+                            db = await get_connection()
+                            try:
+                                await db.execute("BEGIN")
+                                for message in batch:
+                                    sender_name = _derive_sender_name(message.sender)
+                                    sender_id = (
+                                        str(getattr(message.sender, "id", ""))
+                                        if message.sender
+                                        else ""
+                                    )
+
+                                    inserted = await _insert_message(
+                                        message_id=str(message.id),
+                                        chat_id=chat_id,
+                                        chat_name=chat_name,  # type: ignore[arg-type]
+                                        sender_id=sender_id,
+                                        sender_name=sender_name,
+                                        text=message.text,
+                                        timestamp=int(message.date.timestamp()),
+                                        db=db,
+                                    )
+
+                                    if inserted:
+                                        total_messages += 1
+                                        chat_messages += 1
+                                        last_timestamp = int(message.date.timestamp())
+                                    else:
+                                        skipped_duplicate += 1
+                                await db.commit()
+                            except Exception as e:
+                                await db.rollback()
+                                logger.error(f"Error batch inserting for {chat_name}: {e}")
+                            finally:
+                                await db.close()
+
                     async for message in client.iter_messages(
                         dialog.entity,
                         offset_id=last_msg_id or 0,
@@ -500,44 +547,13 @@ async def sync_telegram_messages(
                         if not message.text:
                             skipped_empty += 1
                             continue
-                        fetched.append(message)
 
-                    # Now write to DB in a short transaction (no network I/O inside lock)
-                    async with _write_lock:
-                        db = await get_connection()
-                        try:
-                            await db.execute("BEGIN")
-                            for message in fetched:
-                                sender_name = _derive_sender_name(message.sender)
-                                sender_id = (
-                                    str(getattr(message.sender, "id", ""))
-                                    if message.sender
-                                    else ""
-                                )
+                        fetched_batch.append(message)
+                        if len(fetched_batch) >= write_batch_size:
+                            await flush_batch(fetched_batch)
+                            fetched_batch.clear()
 
-                                inserted = await _insert_message(
-                                    message_id=str(message.id),
-                                    chat_id=chat_id,
-                                    chat_name=chat_name,  # type: ignore[arg-type]
-                                    sender_id=sender_id,
-                                    sender_name=sender_name,
-                                    text=message.text,
-                                    timestamp=int(message.date.timestamp()),
-                                    db=db,
-                                )
-
-                                if inserted:
-                                    total_messages += 1
-                                    chat_messages += 1
-                                    last_timestamp = int(message.date.timestamp())
-                                else:
-                                    skipped_duplicate += 1
-                            await db.commit()
-                        except Exception as e:
-                            await db.rollback()
-                            logger.error(f"Error batch inserting for {chat_name}: {e}")
-                        finally:
-                            await db.close()
+                    await flush_batch(fetched_batch)
 
                     if chat_messages > 0:
                         logger.info(f"Sync: {chat_name} — {chat_messages} new messages")

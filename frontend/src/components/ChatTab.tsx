@@ -178,12 +178,16 @@ export function ChatTab() {
         { role: "user", content: input },
       ];
 
-      console.log(
-        "[DEBUG] Full conversation:",
-        JSON.stringify(apiMessages, null, 2),
-      );
+      if (debugMode) {
+        console.log(
+          "[DEBUG] Full conversation:",
+          JSON.stringify(apiMessages, null, 2),
+        );
+      }
       for await (const event of streamChat(apiMessages, controller.signal)) {
-        console.log("[DEBUG EVENT]", event);
+        if (debugMode) {
+          console.log("[DEBUG EVENT]", event);
+        }
         if (event.type === "token") {
           const tokenEvent = event as TokenEvent;
           dispatch({
@@ -586,6 +590,5 @@ export function ChatTab() {
     </div>
   );
 }
-
 
 
