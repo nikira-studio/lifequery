@@ -82,6 +82,7 @@ backend/
 │
 ├── routers/
 │   ├── chat.py              # POST /api/chat (RAG, SSE)
+│   ├── agent.py             # Agent-facing data retrieval + filtered OpenAPI
 │   ├── data.py              # Sync, import, reindex, stats, chat CRUD
 │   ├── settings.py          # GET/POST /api/settings
 │   ├── telegram_auth.py     # Telegram auth flow endpoints
@@ -194,6 +195,21 @@ Sensitive fields (`telegram_api_hash`, `chat_api_key`, `openrouter_api_key`, `ap
 | Method | Path                     | Description                          |
 |--------|--------------------------|--------------------------------------|
 | POST   | /v1/chat/completions     | OpenAI-format chat, streaming or not |
+
+### Agent API
+
+| Method | Path                         | Description                                      |
+|--------|------------------------------|--------------------------------------------------|
+| GET    | /api/agent/openapi.json      | Filtered OpenAPI spec for agent connectors       |
+| GET    | /api/agent/chats             | List chats/groups/channels for filters           |
+| GET    | /api/agent/people            | List known senders for filters                   |
+| POST   | /api/agent/messages/query    | Pull raw messages by date/person/group filters   |
+| POST   | /api/agent/chunks/query      | Pull chunked conversation context by filters     |
+| POST   | /api/agent/summary           | Generate a summary over filtered raw messages    |
+
+Agent endpoints use Bearer auth with the configured LifeQuery API key when one
+is set. The filtered OpenAPI document intentionally excludes UI/admin routes
+such as sync, import, settings, reindex, and Telegram authentication.
 
 ### Utility
 

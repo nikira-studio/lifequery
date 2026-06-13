@@ -7,13 +7,14 @@ from utils.logger import get_logger
 logger = get_logger(__name__)
 
 
-def verify_api_key(raw_request: Request) -> None:
+def verify_api_key(raw_request: Request, api_key: str | None = None) -> None:
     """Enforce optional Bearer API key auth using the configured API key.
 
     If no API key is configured, access is allowed. This matches the existing
     OpenAI-compatible endpoint behavior for local/self-hosted deployments.
     """
-    if not settings.api_key:
+    expected_key = settings.api_key if api_key is None else api_key
+    if not expected_key:
         return
 
     auth_header = raw_request.headers.get("Authorization")
@@ -24,6 +25,6 @@ def verify_api_key(raw_request: Request) -> None:
         )
 
     provided_key = auth_header.split(" ", 1)[1]
-    if provided_key != settings.api_key:
+    if provided_key != expected_key:
         logger.warning("API request rejected: Invalid API Key")
         raise HTTPException(status_code=401, detail="Unauthorized: Invalid API Key")

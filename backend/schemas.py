@@ -311,13 +311,44 @@ class AgentMessageQueryResponse(BaseModel):
     next_cursor: str | None = None
 
 
-class AgentChunkQueryRequest(AgentQueryFilters):
+class AgentChunkQueryRequest(AgentTimeRange):
     """Query chunked LifeQuery context by date/chat/person metadata."""
 
+    chat_ids: list[str] | None = Field(
+        default=None, description="Restrict results to these chat IDs"
+    )
+    chat_names: list[str] | None = Field(
+        default=None, description="Restrict results to these exact chat names"
+    )
+    chat_types: list[str] | None = Field(
+        default=None, description="Restrict results to chat types: private, group, channel"
+    )
+    sender_names: list[str] | None = Field(
+        default=None, description="Restrict chunks to participant names"
+    )
+    included_only: bool = Field(
+        default=True, description="Only include chats currently enabled in LifeQuery"
+    )
+    text_query: str | None = Field(
+        default=None, description="Case-insensitive substring filter over chunk content"
+    )
     limit: int = Field(default=100, ge=1, le=500)
+    cursor: str | None = Field(
+        default=None,
+        description="Opaque pagination cursor returned by a previous response",
+    )
+    order: str = Field(default="asc", description="Sort order: asc or desc")
     include_content: bool = Field(
         default=True, description="Include chunk content in the response"
     )
+
+    @field_validator("order")
+    @classmethod
+    def validate_order(cls, value: str) -> str:
+        normalized = value.lower()
+        if normalized not in {"asc", "desc"}:
+            raise ValueError("order must be asc or desc")
+        return normalized
 
 
 class AgentChunkRecord(BaseModel):

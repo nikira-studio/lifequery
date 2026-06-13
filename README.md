@@ -129,6 +129,19 @@ Go to **Settings → Chat Inference** to choose a provider:
 
 LifeQuery exposes `/v1/chat/completions` compatible with any OpenAI client. Set base URL to `http://localhost:3134/v1`.
 
+## Agent API
+
+LifeQuery also exposes a filtered, authenticated OpenAPI surface for agent
+connectors such as Agent Core:
+
+```text
+http://localhost:3134/api/agent/openapi.json
+```
+
+It supports structured retrieval by date range, chat/group, sender/person, and
+source, plus an LLM-backed summary endpoint. See
+[`docs/AGENT_API.md`](docs/AGENT_API.md).
+
 ---
 
 ## Hardware requirements

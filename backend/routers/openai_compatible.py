@@ -287,7 +287,7 @@ async def list_models(raw_request: Request):
 
 def _verify_openai_api_key(raw_request: Request) -> None:
     """Enforce optional API key auth for OpenAI-compatible endpoints."""
-    verify_api_key(raw_request)
+    verify_api_key(raw_request, settings.api_key)
 
 
 @router.post("/chat/completions")
