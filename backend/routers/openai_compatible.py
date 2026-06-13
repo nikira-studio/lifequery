@@ -22,6 +22,7 @@ from schemas import (
 from sse_starlette import EventSourceResponse
 from sse_starlette.sse import ServerSentEvent
 from utils.sse import create_sse_event
+from utils.auth import verify_api_key
 from utils.validation import extract_query_from_messages, validate_chat_messages
 
 logger = logging.getLogger(__name__)
@@ -286,22 +287,7 @@ async def list_models(raw_request: Request):
 
 def _verify_openai_api_key(raw_request: Request) -> None:
     """Enforce optional API key auth for OpenAI-compatible endpoints."""
-    if not settings.api_key:
-        return
-
-    auth_header = raw_request.headers.get("Authorization")
-    if not auth_header or not auth_header.startswith("Bearer "):
-        logger.warning(
-            "OpenAI request rejected: Missing or invalid Authorization header"
-        )
-        raise HTTPException(
-            status_code=401, detail="Unauthorized: Missing or invalid API Key"
-        )
-
-    provided_key = auth_header.split(" ", 1)[1]
-    if provided_key != settings.api_key:
-        logger.warning("OpenAI request rejected: Invalid API Key")
-        raise HTTPException(status_code=401, detail="Unauthorized: Invalid API Key")
+    verify_api_key(raw_request)
 
 
 @router.post("/chat/completions")

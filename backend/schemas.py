@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Any, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 # ============================================================================
 # Health
@@ -218,6 +218,190 @@ class SyncLogResponse(BaseModel):
     """Sync log response."""
 
     logs: list[SyncLogEntry]
+
+
+# ============================================================================
+# Agent API
+# ============================================================================
+
+
+class AgentTimeRange(BaseModel):
+    """Reusable inclusive/exclusive time range for agent queries."""
+
+    start: datetime = Field(
+        ..., description="Inclusive start timestamp for the query window"
+    )
+    end: datetime = Field(
+        ..., description="Exclusive end timestamp for the query window"
+    )
+
+    @field_validator("end")
+    @classmethod
+    def validate_end(cls, value: datetime, info):
+        start = info.data.get("start")
+        if start and value <= start:
+            raise ValueError("end must be after start")
+        return value
+
+
+class AgentQueryFilters(AgentTimeRange):
+    """Common filters for agent-facing data retrieval."""
+
+    chat_ids: list[str] | None = Field(
+        default=None, description="Restrict results to these chat IDs"
+    )
+    chat_names: list[str] | None = Field(
+        default=None, description="Restrict results to these exact chat names"
+    )
+    chat_types: list[str] | None = Field(
+        default=None, description="Restrict results to chat types: private, group, channel"
+    )
+    sender_ids: list[str] | None = Field(
+        default=None, description="Restrict message results to these sender IDs"
+    )
+    sender_names: list[str] | None = Field(
+        default=None, description="Restrict results to these exact sender names"
+    )
+    sources: list[str] | None = Field(
+        default=None, description="Restrict message results to source values"
+    )
+    included_only: bool = Field(
+        default=True, description="Only include chats currently enabled in LifeQuery"
+    )
+    text_query: str | None = Field(
+        default=None, description="Case-insensitive substring filter over message text"
+    )
+    limit: int = Field(default=500, ge=1, le=2000)
+    cursor: str | None = Field(
+        default=None,
+        description="Opaque pagination cursor returned by a previous response",
+    )
+    order: str = Field(default="asc", description="Sort order: asc or desc")
+
+    @field_validator("order")
+    @classmethod
+    def validate_order(cls, value: str) -> str:
+        normalized = value.lower()
+        if normalized not in {"asc", "desc"}:
+            raise ValueError("order must be asc or desc")
+        return normalized
+
+
+class AgentMessageRecord(BaseModel):
+    """A raw message returned by the agent API."""
+
+    id: int
+    message_id: str
+    chat_id: str
+    chat_name: str | None = None
+    chat_type: str | None = None
+    sender_id: str | None = None
+    sender_name: str | None = None
+    text: str | None = None
+    timestamp: int
+    datetime: datetime
+    source: str
+
+
+class AgentMessageQueryResponse(BaseModel):
+    """Paginated raw-message query response."""
+
+    messages: list[AgentMessageRecord]
+    count: int
+    next_cursor: str | None = None
+
+
+class AgentChunkQueryRequest(AgentQueryFilters):
+    """Query chunked LifeQuery context by date/chat/person metadata."""
+
+    limit: int = Field(default=100, ge=1, le=500)
+    include_content: bool = Field(
+        default=True, description="Include chunk content in the response"
+    )
+
+
+class AgentChunkRecord(BaseModel):
+    """A chunk returned by the agent API."""
+
+    id: int
+    chunk_id: str
+    chat_id: str
+    chat_name: str | None = None
+    chat_type: str | None = None
+    participants: list[str]
+    timestamp_start: int
+    timestamp_end: int
+    datetime_start: datetime
+    datetime_end: datetime
+    message_count: int
+    content: str | None = None
+
+
+class AgentChunkQueryResponse(BaseModel):
+    """Paginated chunk query response."""
+
+    chunks: list[AgentChunkRecord]
+    count: int
+    next_cursor: str | None = None
+
+
+class AgentChatRecord(BaseModel):
+    """Chat metadata available to agent integrations."""
+
+    chat_id: str
+    chat_name: str | None = None
+    chat_type: str | None = None
+    included: bool
+    message_count: int
+    last_message_at: int | None = None
+    created_at: int
+
+
+class AgentChatListResponse(BaseModel):
+    """List of chats available for filtering."""
+
+    chats: list[AgentChatRecord]
+    count: int
+
+
+class AgentPersonRecord(BaseModel):
+    """Sender/person metadata available to agent integrations."""
+
+    sender_id: str | None = None
+    sender_name: str | None = None
+    message_count: int
+    first_message_at: int | None = None
+    last_message_at: int | None = None
+
+
+class AgentPersonListResponse(BaseModel):
+    """List of known senders available for filtering."""
+
+    people: list[AgentPersonRecord]
+    count: int
+
+
+class AgentSummaryRequest(AgentQueryFilters):
+    """Generate a summary over a filtered message range."""
+
+    limit: int = Field(default=1000, ge=1, le=2000)
+    prompt: str | None = Field(
+        default=None,
+        description="Optional extra instruction for the summary, e.g. focus areas",
+    )
+    include_messages: bool = Field(
+        default=False,
+        description="Include the source messages used for the summary in the response",
+    )
+
+
+class AgentSummaryResponse(BaseModel):
+    """Summary response for agent workflows."""
+
+    summary: str
+    message_count: int
+    next_cursor: str | None = None
+    messages: list[AgentMessageRecord] | None = None
 
 
 # ============================================================================

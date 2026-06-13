@@ -9,7 +9,7 @@ from db.database import init_db
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from routers import chat, data, openai_compatible, settings, telegram_auth
+from routers import agent, chat, data, openai_compatible, settings, telegram_auth
 from utils.exceptions import LifeQueryError
 from utils.scheduler import auto_sync_worker
 
@@ -98,6 +98,7 @@ app.include_router(telegram_auth.router)
 app.include_router(data.router)
 app.include_router(chat.router)
 app.include_router(openai_compatible.router)
+app.include_router(agent.router)
 app.include_router(models.router)
 
 
