@@ -163,6 +163,23 @@ class UnifiedLLMClient:
             f"temperature={temperature}, max_tokens={max_tokens}"
         )
 
+    def _extra_body_for_provider(self) -> dict[str, Any] | None:
+        base_url = str(self.client.base_url)
+        if self.enable_thinking:
+            if "api.z.ai" in base_url:
+                return {"think": True}
+            if "api.minimax.io" in base_url:
+                return {"think": True, "include_reasoning": True, "reasoning_split": True}
+            return {"think": True, "thinking": True, "include_reasoning": True}
+
+        if "openai.com" in base_url:
+            return None
+
+        extra_body = {"include_reasoning": False}
+        if "api.minimax.io" in base_url:
+            extra_body["reasoning_split"] = True
+        return extra_body
+
     async def stream_chat(
         self, messages: list[dict[str, Any]]
     ) -> AsyncGenerator[str, None]:
@@ -189,22 +206,9 @@ class UnifiedLLMClient:
                 "max_tokens": self.max_tokens,
                 "stream": True,
             }
-            if self.enable_thinking:
-                # Most providers use 'think' or 'thinking'.
-                # For GLM (api.z.ai), we avoid 'thinking' as it crashes on boolean.
-                if "api.z.ai" in str(self.client.base_url):
-                    kwargs["extra_body"] = {"think": True}
-                else:
-                    kwargs["extra_body"] = {"think": True, "thinking": True, "include_reasoning": True}
-            elif "openai.com" not in str(self.client.base_url):
-                # Don't send 'thinking' or 'think' in False state to avoid 400s
-                # Use standard 'include_reasoning' for suppression.
-                kwargs["extra_body"] = {"include_reasoning": False}
-                
-                # Minimax naturally packs <think> into the main content stream.
-                # Setting reasoning_split=True forces them into a separate field we can safely ignore.
-                if "api.minimax.io" in str(self.client.base_url):
-                    kwargs["extra_body"]["reasoning_split"] = True
+            extra_body = self._extra_body_for_provider()
+            if extra_body is not None:
+                kwargs["extra_body"] = extra_body
 
             response = await self.client.chat.completions.create(**kwargs)
 
