@@ -172,7 +172,9 @@ class TestAgentApi:
             mock_settings.api_key = ""
             with patch("routers.agent.fetch_all", new_callable=AsyncMock) as mock_fetch:
                 mock_fetch.return_value = rows
-                with patch("routers.agent.get_llm_client", return_value=FakeClient()):
+                with patch(
+                    "routers.agent.get_llm_client", return_value=FakeClient()
+                ) as mock_get_llm_client:
                     response = client.post(
                         "/api/agent/summary",
                         json=_range_payload(include_messages=True),
@@ -183,6 +185,8 @@ class TestAgentApi:
         assert data["summary"] == "Shipped MVP."
         assert data["message_count"] == 1
         assert data["messages"][0]["text"] == "We shipped the MVP."
+        assert mock_get_llm_client.call_count == 1
+        assert mock_get_llm_client.call_args.kwargs == {"enable_thinking": False}
 
     def test_agent_openapi_is_filtered(self):
         response = client.get("/api/agent/openapi.json")

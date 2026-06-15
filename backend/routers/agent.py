@@ -388,7 +388,7 @@ async def summarize_range(
         f"{extra_instruction}\n\nMESSAGES:\n{context}"
     )
 
-    client = get_llm_client(settings)
+    client = get_llm_client(settings, enable_thinking=False)
     parts = []
     async for token in client.stream_chat([{"role": "user", "content": prompt}]):
         parts.append(token)

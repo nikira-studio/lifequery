@@ -274,7 +274,9 @@ class UnifiedLLMClient:
             raise
 
 
-def get_llm_client(settings: Settings) -> UnifiedLLMClient:
+def get_llm_client(
+    settings: Settings, enable_thinking: bool | None = None
+) -> UnifiedLLMClient:
     """Factory function to get the unified LLM client based on settings.
 
     Args:
@@ -292,7 +294,7 @@ def get_llm_client(settings: Settings) -> UnifiedLLMClient:
     model = settings.chat_model
     temp = settings.temperature
     max_tokens = settings.max_tokens
-    thinking = settings.enable_thinking
+    thinking = settings.enable_thinking if enable_thinking is None else enable_thinking
 
     if provider == "ollama":
         # Ollama: use native client so think=False is respected.
