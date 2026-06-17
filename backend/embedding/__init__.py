@@ -1,5 +1,6 @@
 """Embedding pipeline for LifeQuery - incremental embedding with Ollama and ChromaDB."""
 
+import asyncio
 import hashlib
 import json
 import time
@@ -43,9 +44,8 @@ async def get_embedded_versions() -> dict[str, str]:
 
     collection = _get_collection()
     try:
-        # Get count and then fetch all metadata
-        count = collection.count()
-        result = collection.get(limit=count)
+        count = await asyncio.to_thread(collection.count)
+        result = await asyncio.to_thread(collection.get, limit=count)
         versions = {}
         if result["metadatas"]:
             for i, chunk_id in enumerate(result["ids"]):
@@ -164,10 +164,13 @@ async def embed_chunks_incremental() -> AsyncGenerator[dict, None]:
     collection = _get_collection()
 
     changed_chunk_ids = set()
+    shared_chunk_ids = chroma_chunk_ids & sqlite_chunk_ids  # in both — candidates for change check
     try:
-        chroma_count = collection.count()
-        if chroma_count > 0:
-            result = collection.get(ids=list(chroma_chunk_ids), limit=chroma_count)
+        chroma_count = await asyncio.to_thread(collection.count)
+        if chroma_count > 0 and shared_chunk_ids:
+            result = await asyncio.to_thread(
+                collection.get, ids=list(shared_chunk_ids), limit=chroma_count
+            )
             if result["metadatas"]:
                 for i, chunk_id in enumerate(result["ids"]):
                     stored_hash = result["metadatas"][i].get("content_hash", "")
@@ -178,12 +181,20 @@ async def embed_chunks_incremental() -> AsyncGenerator[dict, None]:
     except Exception as e:
         logger.warning(f"Could not check changed chunks: {e}", exc_info=True)
 
+    # Delete stale vectors (in Chroma but no longer in SQLite)
+    if deleted_chunk_ids:
+        try:
+            await asyncio.to_thread(collection.delete, ids=list(deleted_chunk_ids))
+            logger.info(f"Deleted {len(deleted_chunk_ids)} stale chunks from ChromaDB")
+        except Exception as e:
+            logger.warning(f"Could not delete stale chunks from ChromaDB: {e}")
+
     # Determine final sets
     chunks_to_embed = new_chunk_ids | changed_chunk_ids
 
     counts = {
         "embedded": 0,
-        "skipped": len(chroma_chunk_ids) - len(changed_chunk_ids),
+        "skipped": len(shared_chunk_ids) - len(changed_chunk_ids),
         "deleted": len(deleted_chunk_ids),
         "errors": 0,
     }
@@ -233,7 +244,7 @@ async def embed_chunks_incremental() -> AsyncGenerator[dict, None]:
             embeddings = await embed_batch(batch_contents)
             from vector_store.chroma import upsert as chroma_upsert
 
-            chroma_upsert(batch_chunks, embeddings)
+            await asyncio.to_thread(chroma_upsert, batch_chunks, embeddings)
 
             counts["embedded"] += len(batch_chunks)
 
@@ -359,7 +370,9 @@ async def reindex_all() -> AsyncGenerator[dict, None]:
                 embeddings = await embed_batch(batch_contents)
 
                 # Upsert to temporary collection
-                chroma_upsert(batch_chunks, embeddings, collection=temp_collection)
+                await asyncio.to_thread(
+                    chroma_upsert, batch_chunks, embeddings, collection=temp_collection
+                )
 
                 counts["embedded"] += len(batch_chunks)
 

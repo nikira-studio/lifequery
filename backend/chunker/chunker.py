@@ -2,9 +2,8 @@
 
 import hashlib
 import json
-import uuid
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import AsyncGenerator
 
 from config import settings
@@ -16,7 +15,7 @@ logger = get_logger(__name__)
 # Time thresholds (in seconds)
 GAP_HARD_SECONDS = 4 * 60 * 60  # 4 hours
 GAP_SOFT_SECONDS = 20 * 60  # 20 minutes
-CHUNK_MIN_TOKENS = 300  # Minimum tokens for soft break
+CHUNK_MIN_TOKENS = 300  # Kept for backward compatibility; chunk_target setting takes precedence
 
 
 @dataclass
@@ -41,7 +40,7 @@ def estimate_tokens(text: str) -> int:
 
 def format_message(timestamp: int, sender_name: str, text: str) -> str:
     """Format a single message as [timestamp] Sender: message."""
-    dt = datetime.utcfromtimestamp(timestamp)
+    dt = datetime.fromtimestamp(timestamp, tz=timezone.utc)
     date_str = dt.strftime("%Y-%m-%d %H:%M")
     return f"[{date_str}] {sender_name}: {text}"
 
@@ -182,7 +181,7 @@ def chunk_chat(messages: list[dict]) -> list[Chunk]:
         # Check for soft break (20+ minutes gap)
         if delta > GAP_SOFT_SECONDS:
             current_tokens = get_current_token_count()
-            if current_tokens >= CHUNK_MIN_TOKENS:
+            if current_tokens >= settings.chunk_target:
                 # Finalize current chunk and start new
                 chunk = finalize_chunk(current_chunk_messages)
                 if chunk:
@@ -198,24 +197,28 @@ def chunk_chat(messages: list[dict]) -> list[Chunk]:
         # Check for hard max token limit
         current_tokens = get_current_token_count()
         if current_tokens >= settings.chunk_max:
-            # Need to split - finalize with overlap
-            # Find a good split point (aim for roughly half)
             split_point = len(current_chunk_messages) // 2
+            first_half = current_chunk_messages[:split_point]
+            second_half = current_chunk_messages[split_point:]
 
-            # Finalize first half
-            chunk = finalize_chunk(current_chunk_messages[:split_point])
+            chunk = finalize_chunk(first_half)
             if chunk:
                 chunks.append(chunk)
 
-            # Start new chunk with overlap (last chunk_overlap tokens from previous)
-            overlap_content = chunk.content if chunk else ""
-            overlap_lines = overlap_content.split("\n")[-settings.chunk_overlap :]
+            # Carry overlap: take messages from the end of first_half until their
+            # cumulative tokens exceed chunk_overlap, then prepend to second_half
+            overlap_msgs: list[dict] = []
+            overlap_tokens = 0
+            for om in reversed(first_half):
+                t = estimate_tokens(
+                    format_message(om["timestamp"], om["sender_name"], om["text"])
+                )
+                if overlap_tokens + t > settings.chunk_overlap:
+                    break
+                overlap_msgs.insert(0, om)
+                overlap_tokens += t
 
-            # Create overlap messages from the last part of the previous chunk
-            overlap_messages = current_chunk_messages[split_point:]
-
-            # Rebuild with overlap
-            current_chunk_messages = overlap_messages
+            current_chunk_messages = overlap_msgs + second_half
             current_chunk_start_timestamp = (
                 current_chunk_messages[0]["timestamp"]
                 if current_chunk_messages
@@ -229,91 +232,6 @@ def chunk_chat(messages: list[dict]) -> list[Chunk]:
             chunks.append(chunk)
 
     return chunks
-
-
-async def chunk_messages() -> int:
-    """
-    Main entry point - chunk all unembedded messages.
-    Returns the number of chunks created.
-    """
-    logger.info("Starting message chunking...")
-
-    # Get all messages grouped by chat
-    chats = await get_unembedded_messages()
-
-    if not chats:
-        logger.info("No messages to chunk")
-        return 0
-
-    total_chunks = 0
-
-    # Process each chat
-    for chat_id, messages in chats.items():
-        chat_name = messages[0]["chat_name"] if messages else "Unknown"
-        logger.info(f"Chunking chat {chat_name} ({len(messages)} messages)")
-
-        chunks = chunk_chat(messages)
-
-        # Insert chunks into database using a single batch lock for this chat
-        from db.database import get_connection, _write_lock
-        async with _write_lock:
-            db = await get_connection()
-            try:
-                for chunk in chunks:
-                    # Check if chunk with this content hash already exists
-                    cursor = await db.execute(
-                        "SELECT id FROM chunks WHERE content_hash = ?",
-                        (chunk.content_hash,),
-                    )
-                    existing = await cursor.fetchone()
-
-                    if existing:
-                        logger.debug(
-                            f"Skipping duplicate chunk: {chunk.content_hash[:8]}..."
-                        )
-                        continue
-
-                    await db.execute(
-                        """
-                        INSERT INTO chunks (
-                            chunk_id, chat_id, chat_name, participants,
-                            timestamp_start, timestamp_end, message_count,
-                            content, content_hash, embedding_version, embedded_at
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
-                        """,
-                        (
-                            chunk.chunk_id,
-                            chunk.chat_id,
-                            chunk.chat_name,
-                            json.dumps(chunk.participants),
-                            chunk.timestamp_start,
-                            chunk.timestamp_end,
-                            chunk.message_count,
-                            chunk.content,
-                            chunk.content_hash,
-                            settings.embedding_model,
-                        ),
-                    )
-                    total_chunks += 1
-
-                # Update last_chunked_at for this chat so we don't process these messages again
-                if messages:
-                    last_ts = messages[-1]["timestamp"]
-                    await db.execute(
-                        "UPDATE chats SET last_chunked_at = ? WHERE chat_id = ?",
-                        (last_ts, chat_id)
-                    )
-
-                await db.commit()
-            finally:
-                await db.close()
-
-        logger.info(
-            f"Created {len(chunks)} chunks from {len(messages)} messages in {chat_name}"
-        )
-
-    logger.info(f"Chunking complete. Total chunks created: {total_chunks}")
-    return total_chunks
 
 
 async def chunk_messages_streaming() -> AsyncGenerator[dict, None]:

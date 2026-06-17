@@ -11,6 +11,7 @@ from chunker.chunker import (
     estimate_tokens,
     format_message,
 )
+# chunk_target is now used for soft-break threshold (default 1000 in settings)
 
 
 class TestEstimateTokens:
@@ -114,10 +115,12 @@ class TestChunkChat:
     def test_soft_break_with_sufficient_content(self):
         """20-minute gap with sufficient prior content → new chunk."""
         base_time = 1699030920
-        # Need at least 300 tokens before the gap - each message needs ~60+ words
+        # Need >= chunk_target tokens (default 1000) before the gap.
+        # Each message: ~22 words * 8 repetitions + format prefix ≈ 250 tokens.
+        # 5 messages ≈ 1250 tokens → exceeds the 1000-token soft-break threshold.
         long_text = (
             "This is a longer message with many more words to ensure we exceed the token minimum threshold for the soft break test. "
-            * 3
+            * 8
         )
         messages = [
             {
@@ -149,7 +152,7 @@ class TestChunkChat:
         assert len(result) == 2
 
     def test_soft_break_with_insufficient_content(self):
-        """20-minute gap with tiny prior content (< 300 tokens) → continues."""
+        """20-minute gap with tiny prior content (well below chunk_target) → continues."""
         base_time = 1699030920
         # First message only (tiny content)
         messages = [
@@ -214,11 +217,8 @@ class TestChunkChat:
         assert len(result) == 2
 
     def test_hard_max_split_with_overlap(self):
-        """Hard-max split → chunk is split and overlap is applied."""
+        """Hard-max split → produces multiple chunks with message overlap."""
         base_time = 1699030920
-        # Need enough text to exceed chunk_max (1200 tokens by default)
-        # With ~1.35 tokens per word, need ~900 words minimum
-        # Each message has about 10 words, so need ~90+ messages
         very_long_text = (
             "This is a very long message with lots of words to ensure we exceed the chunk maximum token limit. "
             * 20
@@ -233,16 +233,19 @@ class TestChunkChat:
                 "text": f"Message {i}: {very_long_text}",
                 "timestamp": base_time + (i * 60),
             }
-            for i in range(100)  # Should definitely exceed chunk_max
+            for i in range(100)
         ]
 
         result = chunk_chat(messages)
-        # Should have multiple chunks
         assert len(result) > 1
-        # Verify overlap is applied (content should appear in consecutive chunks)
+        # Each chunk must be internally consistent
+        for chunk in result:
+            assert chunk.message_count > 0
+            assert chunk.timestamp_start <= chunk.timestamp_end
+        # With overlap, consecutive chunks may share timestamps — that's expected
+        # Just verify chunk boundaries are monotonically progressing
         for i in range(len(result) - 1):
-            # The end of chunk i should share some content with start of chunk i+1
-            assert result[i].timestamp_end <= result[i + 1].timestamp_start
+            assert result[i].timestamp_start <= result[i + 1].timestamp_start
 
     def test_multiple_participants(self):
         """Chat with multiple participants."""
