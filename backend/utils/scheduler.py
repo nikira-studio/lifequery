@@ -25,13 +25,16 @@ async def auto_sync_worker():
                 # Check Telegram status before syncing
                 from telegram.telethon_sync import get_telegram_status
                 status = await get_telegram_status()
-                
+
                 if status.get("state") == "connected":
-                    logger.info("Auto-sync worker: Starting sync task")
-                    from routers.data import sync_generator
-                    async for _ in sync_generator():
-                        pass
-                    logger.info("Auto-sync worker: Sync task completed")
+                    from routers.data import _sync_lock, sync_generator
+                    if _sync_lock.locked():
+                        logger.info("Auto-sync worker: Sync already in progress, skipping")
+                    else:
+                        logger.info("Auto-sync worker: Starting sync task")
+                        async for _ in sync_generator():
+                            pass
+                        logger.info("Auto-sync worker: Sync task completed")
                 else:
                     logger.info("Auto-sync worker: Telegram not connected, skipping sync")
                 

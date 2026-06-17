@@ -119,9 +119,12 @@ def _get_field_type(key: str) -> type:  # type: ignore[return-value]
 
 
 def _convert_value(key: str, value: str) -> Any:
-    if value is None or value == "":
+    if value is None:
         return None
     field_type = _get_field_type(key)
+    if value == "":
+        # Allow clearing string fields (e.g. api_key → disables auth)
+        return "" if field_type == str else None
     if field_type == bool:
         return value.lower() in ("true", "1", "yes")
     elif field_type == int:
@@ -191,7 +194,7 @@ async def save_to_db(updates: dict[str, Any]) -> Settings:
             for key, value in updates.items():
                 if value is None:
                     continue
-                str_value = str(value) if value != "" else ""
+                str_value = str(value)
                 await db.execute(
                     "INSERT OR REPLACE INTO config (key, value, updated_at) VALUES (?, ?, ?)",
                     (key, str_value, timestamp),

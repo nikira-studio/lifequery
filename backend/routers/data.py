@@ -1,5 +1,6 @@
 """Data management router - sync, import, reindex, stats."""
 
+import asyncio
 from datetime import datetime
 from typing import AsyncGenerator, Union
 
@@ -37,6 +38,9 @@ from utils.sse import create_error_event, create_progress_event, create_sse_even
 logger = get_logger(__name__)
 
 router = APIRouter(prefix="/api", tags=["data"])
+
+# Prevents concurrent sync/process runs from interleaving on the same data
+_sync_lock = asyncio.Lock()
 
 
 # ============================================================================
@@ -184,7 +188,7 @@ async def delete_chat(chat_id: str) -> dict:
                 except Exception as exc:
                     logger.warning(f"ChromaDB delete error for {chat_id}: {exc}")
 
-            await asyncio.get_event_loop().run_in_executor(None, _chroma_delete)
+            await asyncio.to_thread(_chroma_delete)
             logger.info(f"Deleted {len(chunk_ids)} chunks from ChromaDB for {chat_id}")
 
         logger.info(
@@ -490,6 +494,16 @@ async def sync_generator() -> AsyncGenerator[ServerSentEvent, None]:
     Yields:
         ServerSentEvent with progress, done, or error data
     """
+    if _sync_lock.locked():
+        yield create_error_event("A sync or process operation is already in progress.")
+        return
+
+    async with _sync_lock:
+        async for event in _sync_generator_inner():
+            yield event
+
+
+async def _sync_generator_inner() -> AsyncGenerator[ServerSentEvent, None]:
     start_ts = int(datetime.now().timestamp())
     total_messages = 0
     total_chunks = 0
@@ -610,42 +624,53 @@ async def start_process():
     """Process pending data (Chunking & Embedding) without Telegram sync."""
     logger.info("Starting manual data processing (chunk/embed)")
     async def process_generator():
-        start_ts = int(datetime.now().timestamp())
-        total_chunks = 0
-        total_embedded = 0
-        
-        try:
-            # Step 1: Chunking
-            yield create_progress_event("chunk", "Chunking new/imported messages...")
-            async for event in chunk_messages_streaming():
-                if event.get("type") == "progress":
-                    yield create_progress_event("chunk", event.get("message"))
-                elif event.get("type") == "done":
-                    total_chunks = event.get("chunks_created", 0)
-            
-            # Step 2: Embedding
-            yield create_progress_event("embed", "Embedding new chunks...")
-            async for event in embed_chunks_incremental():
-                if event.get("type") == "progress":
-                    yield create_progress_event("embed", event.get("message"))
-                elif event.get("type") == "done":
-                    total_embedded = event.get("embedded", 0)
-            
-            await _log_operation("process", start_ts, "success", 
-                               chunks_created=total_chunks, 
-                               detail=f"Processed {total_chunks} chunks, {total_embedded} embedded.")
-                               
-            yield create_sse_event({
-                "type": "done",
-                "chunks_created": total_chunks,
-                "chunks_embedded": total_embedded
-            })
-        except Exception as e:
-            logger.error(f"Manual process error: {e}")
-            yield create_error_event(str(e))
-            await _log_operation("process", start_ts, "error", detail=str(e))
+        if _sync_lock.locked():
+            yield create_error_event("A sync or process operation is already in progress.")
+            return
+        async with _sync_lock:
+            async for event in _process_generator_inner():
+                yield event
 
     return EventSourceResponse(process_generator(), headers={"X-Accel-Buffering": "no"})
+
+
+async def _process_generator_inner() -> AsyncGenerator[ServerSentEvent, None]:
+    start_ts = int(datetime.now().timestamp())
+    total_chunks = 0
+    total_embedded = 0
+
+    try:
+        # Step 1: Chunking
+        yield create_progress_event("chunk", "Chunking new/imported messages...")
+        async for event in chunk_messages_streaming():
+            if event.get("type") == "progress":
+                yield create_progress_event("chunk", event.get("message"))
+            elif event.get("type") == "done":
+                total_chunks = event.get("chunks_created", 0)
+
+        # Step 2: Embedding
+        yield create_progress_event("embed", "Embedding new chunks...")
+        async for event in embed_chunks_incremental():
+            if event.get("type") == "progress":
+                yield create_progress_event("embed", event.get("message"))
+            elif event.get("type") == "done":
+                total_embedded = event.get("embedded", 0)
+
+        await _log_operation(
+            "process", start_ts, "success",
+            chunks_created=total_chunks,
+            detail=f"Processed {total_chunks} chunks, {total_embedded} embedded.",
+        )
+
+        yield create_sse_event({
+            "type": "done",
+            "chunks_created": total_chunks,
+            "chunks_embedded": total_embedded,
+        })
+    except Exception as e:
+        logger.error(f"Manual process error: {e}")
+        yield create_error_event(str(e))
+        await _log_operation("process", start_ts, "error", detail=str(e))
 
 
 @router.post("/sync")

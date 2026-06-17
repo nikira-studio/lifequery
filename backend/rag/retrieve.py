@@ -76,7 +76,9 @@ def parse_date_range(query: str):
         "february": 2,
         "march": 3,
         "april": 4,
-        "may": 5,
+        # "may" intentionally omitted — it's a common modal verb ("I may have...")
+        # and causes false-positive month filters on unrelated queries.
+        # Users should include the year ("May 2024") for precise filtering.
         "june": 6,
         "july": 7,
         "august": 8,

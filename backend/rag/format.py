@@ -5,7 +5,7 @@ This module handles:
 - Converting chunk data to user-friendly formats
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 
@@ -53,7 +53,7 @@ def fmt_date(timestamp: int) -> str:
     """
     if timestamp == 0:
         return "Unknown"
-    dt = datetime.utcfromtimestamp(timestamp)
+    dt = datetime.fromtimestamp(timestamp, tz=timezone.utc)
     return dt.strftime("%Y-%m-%d")
 
 

@@ -72,8 +72,9 @@ async def update_settings(updates: SettingsUpdate) -> SettingsUpdateResponse:
     """Update settings. Masked values (****) are ignored (keep existing)."""
     update_dict = updates.model_dump(exclude_none=True)
 
-    # Remove empty strings - don't update with empty values
-    update_dict = {k: v for k, v in update_dict.items() if v != ""}
+    # exclude_none=True above already drops unset fields; empty strings are
+    # intentional clears (e.g. disabling api_key by setting it to "")
+    update_dict = {k: v for k, v in update_dict.items() if v is not None}
 
     if not update_dict:
         return SettingsUpdateResponse()

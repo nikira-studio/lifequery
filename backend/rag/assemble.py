@@ -22,49 +22,49 @@ def build_context(
 ) -> tuple[str, list[RetrievedChunk], int]:
     """Build context text from retrieved chunks, respecting token limit.
 
+    Fills the context budget in relevance order (best-matching chunks first),
+    then sorts the selected chunks chronologically for presentation.
+
     Args:
-        chunks: List of retrieved chunks (already sorted by relevance)
+        chunks: List of retrieved chunks sorted by relevance (best first)
         context_cap: Maximum token count for context
 
     Returns:
         Tuple of (context_text, used_chunks, token_count)
     """
-    context_parts: list[str] = []
-    token_count = 0
-    used_chunks: list[RetrievedChunk] = []
+    from datetime import datetime, timezone
 
-    # Sort chunks by timestamp (newest first) to prioritize recent context
-    chunks.sort(key=lambda x: x.timestamp_start, reverse=True)
+    token_count = 0
+    # (chunk, formatted_text) — filled in relevance order, do NOT sort input
+    selected: list[tuple[RetrievedChunk, str]] = []
 
     for chunk in chunks:
-        # Build a chunk header
-        from datetime import datetime
-
-        start_dt = datetime.utcfromtimestamp(chunk.timestamp_start).strftime("%Y-%m-%d")
-        end_dt = datetime.utcfromtimestamp(chunk.timestamp_end).strftime("%Y-%m-%d")
-
+        start_dt = datetime.fromtimestamp(chunk.timestamp_start, tz=timezone.utc).strftime("%Y-%m-%d")
+        end_dt = datetime.fromtimestamp(chunk.timestamp_end, tz=timezone.utc).strftime("%Y-%m-%d")
         header = f"--- CHAT: {chunk.chat_name or 'Unknown'} | DATES: {start_dt} to {end_dt} ---"
         chunk_text = f"{header}\n{chunk.content}"
 
         tokens = estimate_tokens(chunk_text)
         if token_count + tokens > context_cap:
             logger.debug(
-                f"Context cap reached: {token_count} tokens, {len(context_parts)} chunks"
+                f"Context cap reached: {token_count} tokens, {len(selected)} chunks"
             )
             break
-        context_parts.append(chunk_text)
+        selected.append((chunk, chunk_text))
         token_count += tokens
-        used_chunks.append(chunk)
 
-    if not context_parts:
+    if not selected:
         logger.warning("No chunks fit within context cap")
         return "", [], 0
 
-    context_text = "\n\n".join(context_parts)
-    logger.debug(
-        f"Context assembled: {token_count} tokens, {len(context_parts)} chunks"
-    )
+    # Sort selected chunks chronologically for coherent presentation
+    selected.sort(key=lambda x: x[0].timestamp_start)
+    used_chunks = [c for c, _ in selected]
+    context_text = "\n\n".join(t for _, t in selected)
 
+    logger.debug(
+        f"Context assembled: {token_count} tokens, {len(selected)} chunks"
+    )
     return context_text, used_chunks, token_count
 
 

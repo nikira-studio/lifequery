@@ -1,5 +1,7 @@
 """Authentication helpers for external API surfaces."""
 
+import secrets
+
 from config import settings
 from fastapi import HTTPException, Request
 from utils.logger import get_logger
@@ -25,6 +27,6 @@ def verify_api_key(raw_request: Request, api_key: str | None = None) -> None:
         )
 
     provided_key = auth_header.split(" ", 1)[1]
-    if provided_key != expected_key:
+    if not secrets.compare_digest(provided_key, expected_key):
         logger.warning("API request rejected: Invalid API Key")
         raise HTTPException(status_code=401, detail="Unauthorized: Invalid API Key")

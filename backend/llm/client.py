@@ -334,8 +334,7 @@ def get_llm_client(
             url = "https://api.openai.com/v1"
             
         api_key = settings.chat_api_key or settings.openrouter_api_key
-        # Default model if none picked
-        active_model = model if model and model != "qwen3:8b" else "gpt-4o-mini"
+        active_model = model if model else "gpt-4o-mini"
 
         logger.info(f"Creating UnifiedLLMClient for OpenAI: url={url}, model={active_model}")
         return UnifiedLLMClient(
@@ -354,8 +353,7 @@ def get_llm_client(
             url = "https://api.minimax.io/v1"
         
         api_key = settings.chat_api_key or settings.openrouter_api_key
-        # Default model if none picked
-        active_model = model if model and model != "qwen3:8b" else "MiniMax-M2.5"
+        active_model = model if model else "MiniMax-M2.5"
 
         logger.info(f"Creating UnifiedLLMClient for MiniMax: url={url}, model={active_model}")
         return UnifiedLLMClient(
@@ -374,8 +372,7 @@ def get_llm_client(
             url = "https://api.z.ai/api/coding/paas/v4"
             
         api_key = settings.chat_api_key or settings.openrouter_api_key
-        # Default model if none picked
-        active_model = model if model and model != "qwen3:8b" else "glm-4.7"
+        active_model = model if model else "glm-4.7"
 
         logger.info(f"Creating UnifiedLLMClient for GLM: url={url}, model={active_model}")
         return UnifiedLLMClient(
