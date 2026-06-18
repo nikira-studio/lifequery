@@ -485,9 +485,9 @@ map $http_upgrade $connection_upgrade {
 | max_tokens          | int     | 1024                           | Max tokens per response                  |
 | top_k               | int     | 8                              | Chunks retrieved per query               |
 | context_cap         | int     | 6000                           | Max tokens in context window             |
-| chunk_target        | int     | 850                            | Target chunk size (tokens)               |
-| chunk_max           | int     | 1200                           | Hard max chunk size (tokens)             |
-| chunk_overlap       | int     | 100                            | Overlap between chunks (tokens)          |
+| chunk_target        | int     | 1000                           | Target chunk size (tokens)               |
+| chunk_max           | int     | 1500                           | Hard max chunk size (tokens)             |
+| chunk_overlap       | int     | 250                            | Overlap between chunks (tokens)          |
 | api_key             | str     | —                              | LifeQuery API key (sensitive)            |
 | auto_sync_interval  | int     | 30                             | Auto-sync interval in minutes (0 = off)  |
 | enable_thinking     | bool    | false                          | Enable LLM chain-of-thought (Qwen3)      |
