@@ -302,7 +302,7 @@ embed_query()          # Ollama embedding via OpenAI-compat /v1/embeddings
 chroma.query()         # top_k nearest chunks (only from included chats)
     │
     ▼
-assemble_context()     # sort by date, truncate at context_cap tokens
+assemble_context()     # fill by relevance, sort selected chunks by date for presentation
     │
     ▼
 build_messages()       # inject {context_text} into system prompt
@@ -340,10 +340,9 @@ Implemented in `chunker/chunker.py`. Messages are processed per-chat in chronolo
 
 **Rules (applied in order):**
 
-1. **Gap reset** — If the time gap between consecutive messages exceeds 4 hours, the current chunk is saved and a new one starts.
-2. **Short gap continuation** — Messages within 20 minutes of each other extend the current chunk.
-3. **Size target** — When a chunk reaches the target size (default 850 tokens), it is eligible to be saved.
-4. **Hard max** — A chunk cannot exceed the hard max (default 1200 tokens). If adding a message would exceed this, the current chunk is saved with overlap, and a new chunk starts from the last `chunk_overlap` tokens.
+1. **Hard gap** — If the time gap between consecutive messages exceeds 4 hours, the current chunk is saved and a new one starts unconditionally.
+2. **Soft gap** — If the gap is 20+ minutes AND the current chunk has reached `chunk_target` tokens (default 1000), the chunk is saved and a new one starts.
+3. **Hard max** — A chunk cannot exceed `chunk_max` tokens (default 1500). If the limit is hit, the chunk is split at the midpoint and the new chunk begins with an overlap of up to `chunk_overlap` tokens (default 250) carried from the end of the previous chunk.
 
 **Deduplication:** Each chunk's text is hashed (SHA256). If an identical hash already exists in the database, the chunk is skipped during embedding.
 
