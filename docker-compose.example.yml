@@ -9,8 +9,10 @@
 name: lifequery
 
 services:
-  backend:
-    build: ./backend
+  lifequery:
+    build:
+      context: .
+      dockerfile: Dockerfile
     
     # -------------------------------------------------------------------------
     # VOLUME MOUNTS
@@ -25,24 +27,7 @@ services:
       - lifequery-chroma:/app/data/chroma
       
     ports:
-      - "3134:8000"
-      
-    networks:
-      - lifequery_network
-      
-    restart: unless-stopped
-
-  frontend:
-    build: ./frontend
-    
-    volumes:
-      - ./frontend/nginx.conf:/etc/nginx/nginx.conf:ro
-
-    ports:
-      - "3133:8080"
-      
-    depends_on:
-      - backend
+      - "3133:8000"
       
     networks:
       - lifequery_network

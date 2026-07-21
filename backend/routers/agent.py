@@ -6,11 +6,11 @@ such as sync, import, reindex, settings, and Telegram authentication.
 """
 
 from datetime import datetime, timezone
+from copy import deepcopy
 import json
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query, Request
-from fastapi.openapi.utils import get_openapi
 
 from config import settings
 from db.database import fetch_all
@@ -412,21 +412,23 @@ async def summarize_range(
 @router.get("/openapi.json", include_in_schema=False)
 async def agent_openapi(raw_request: Request) -> dict:
     """Return an OpenAPI spec containing only the agent-facing endpoints."""
-    agent_routes = [
-        route
-        for route in raw_request.app.routes
-        if getattr(route, "path", "").startswith("/api/agent/")
-        and getattr(route, "path", "") != "/api/agent/openapi.json"
-    ]
-    spec = get_openapi(
-        title="LifeQuery Agent API",
-        version="1.0.0",
-        description=(
+    # FastAPI 0.139 keeps included routers as lazy route wrappers. Generating
+    # from app.routes directly therefore produces an empty schema; generate the
+    # application's resolved schema, then expose only this public API surface.
+    spec = deepcopy(raw_request.app.openapi())
+    spec["info"] = {
+        "title": "LifeQuery Agent API",
+        "version": "1.0.0",
+        "description": (
             "Authenticated LifeQuery data access for agent connectors. "
             "Use Bearer auth with the configured LifeQuery API key."
         ),
-        routes=agent_routes,
-    )
+    }
+    spec["paths"] = {
+        path: path_item
+        for path, path_item in spec.get("paths", {}).items()
+        if path.startswith("/api/agent/") and path != "/api/agent/openapi.json"
+    }
     spec.setdefault("components", {}).setdefault("securitySchemes", {})[
         "BearerAuth"
     ] = {"type": "http", "scheme": "bearer"}

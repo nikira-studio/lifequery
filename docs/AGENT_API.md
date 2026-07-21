@@ -12,14 +12,14 @@ authentication.
 Import this URL into OpenAPI-capable connector systems:
 
 ```text
-http://localhost:3134/api/agent/openapi.json
+http://localhost:3133/api/agent/openapi.json
 ```
 
 If LifeQuery is running inside Docker and Agent Core is on the same Docker
 network, use the service URL instead:
 
 ```text
-http://backend:8000/api/agent/openapi.json
+http://lifequery:8000/api/agent/openapi.json
 ```
 
 The filtered spec contains only the agent-safe endpoints.

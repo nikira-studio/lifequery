@@ -1,6 +1,7 @@
 """LifeQuery Backend - Main FastAPI Application."""
 
 import asyncio
+import os
 import time
 from contextlib import asynccontextmanager
 
@@ -12,6 +13,7 @@ from fastapi.responses import JSONResponse
 from routers import agent, chat, data, openai_compatible, settings, telegram_auth
 from utils.exceptions import LifeQueryError
 from utils.scheduler import auto_sync_worker
+from utils.spa_static import SPAStaticFiles
 
 # Configure structured logging
 from utils.logger import get_logger, setup_logging
@@ -101,7 +103,6 @@ app.include_router(openai_compatible.router)
 app.include_router(agent.router)
 app.include_router(models.router)
 
-
 # Exception handlers
 @app.exception_handler(LifeQueryError)
 async def lifequery_error_handler(request: Request, exc: LifeQueryError):
@@ -148,6 +149,15 @@ async def health_check():
     app.state.health_cache = result
     app.state.health_cache_time = now
     return result
+
+
+# This mount must be registered last. Starlette evaluates routes in order, and
+# mounting at / before the health route would turn /api/health into an SPA 404.
+# API routers above still take precedence, while browser-only paths fall back
+# to the built React application in the production single-container image.
+frontend_dist = os.environ.get("FRONTEND_DIST_PATH")
+if frontend_dist and os.path.isdir(frontend_dist):
+    app.mount("/", SPAStaticFiles(directory=frontend_dist, html=True), name="frontend")
 
 
 if __name__ == "__main__":

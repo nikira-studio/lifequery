@@ -1,6 +1,6 @@
 /**
  * Base HTTP/SSE client for the LifeQuery API.
- * All API calls go through /api/ which nginx proxies to the FastAPI backend.
+ * All API calls go through the same-origin /api/ routes served by FastAPI.
  */
 
 const BASE = "/api";

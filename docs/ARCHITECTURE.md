@@ -1,7 +1,7 @@
 # LifeQuery — Architecture Document
 
 **Version:** 1.0
-**Last Updated:** 2026-02-21
+**Last Updated:** 2026-07-21
 
 ---
 
@@ -12,14 +12,11 @@ Browser
   │
   ▼
 ┌─────────────────────────────────────────┐
-│  Frontend (React 18 + Vite)             │
-│  Served by nginx on port 3133           │
-│  Proxies /api/ and /v1/ to backend      │
-└─────────────────────────────────────────┘
-  │  HTTP / SSE
-  ▼
-┌─────────────────────────────────────────┐
-│  Backend (FastAPI + uvicorn, port 8000) │
+│  LifeQuery (FastAPI + React/Vite)       │
+│  One container; host port 3133          │
+│  UI at /; API at /api and /v1           │
+│                                         │
+│  FastAPI + uvicorn (port 8000)          │
 │                                         │
 │  ┌────────────┐  ┌────────────────────┐ │
 │  │ RAG Pipeline│  │ Telegram Sync      │ │
@@ -51,7 +48,7 @@ Browser
 | HTTP client     | Native `fetch` with `ReadableStream`    |
 | Streaming       | SSE via manual `ReadableStream` parsing |
 | Testing         | Vitest                                  |
-| Container       | nginx (serves static build, proxies API)|
+| Production host | FastAPI serves the compiled static build |
 
 ### Backend
 
@@ -232,7 +229,7 @@ data: [DONE]\r\n\r\n
 
 **Frontend parsing** (`chat.ts`, `client.ts`): The `ReadableStream` from `fetch` is read in a loop, accumulated in a buffer, and split on `/\r\n\r\n|\n\n|\r\r/` to handle all SSE line-ending variants per spec.
 
-**Proxy compatibility**: All SSE responses include `X-Accel-Buffering: no` (set by the backend) and the nginx frontend also adds `add_header X-Accel-Buffering "no" always`. This prevents nginx-based upstream proxies from buffering the stream. The nginx `Connection` header uses a map so SSE requests send `Connection: keep-alive` and WebSocket requests send `Connection: upgrade`.
+**Proxy compatibility**: SSE responses include `X-Accel-Buffering: no` so an optional reverse proxy in front of LifeQuery can disable buffering. The application itself serves both the UI and API directly from FastAPI; no internal proxy is involved.
 
 ---
 
@@ -447,8 +444,7 @@ volumes:
 
 | Service  | Build context | Internal port | Host port |
 |----------|--------------|---------------|-----------|
-| backend  | ./backend     | 8000          | 3134      |
-| frontend | ./frontend    | 8080          | 3133      |
+| lifequery | root multi-stage image | 8000 | 3133 |
 
 ### Backend environment variables
 
@@ -457,27 +453,9 @@ volumes:
 | LOG_LEVEL | INFO    | Python logging level      |
 | DATA_DIR  | /app/data | Override data directory |
 
-### Frontend (nginx)
+### Frontend delivery
 
-nginx serves the Vite-built static files and proxies:
-- `/api/` → `http://backend:8000/api/`
-- `/v1/` → `http://backend:8000/v1/`
-
-SSE-specific nginx settings on both locations:
-```nginx
-proxy_buffering off;
-proxy_read_timeout 600;
-proxy_send_timeout 600;
-add_header X-Accel-Buffering "no" always;
-```
-
-Connection header is conditional:
-```nginx
-map $http_upgrade $connection_upgrade {
-    default   upgrade;
-    ''        keep-alive;
-}
-```
+The root multi-stage image builds the Vite frontend and copies it into the FastAPI image. FastAPI serves the compiled app at `/`, preserves client-side SPA routes, and handles `/api/` and `/v1/` directly in the same process.
 
 ---
 
@@ -537,7 +515,7 @@ npm test
 ### Health check
 
 ```bash
-curl http://localhost:3134/api/health
+curl http://localhost:3133/api/health
 # {"status":"ok","version":"1.0.0"}
 ```
 

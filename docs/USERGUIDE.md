@@ -217,7 +217,7 @@ LifeQuery exposes a `/v1/chat/completions` endpoint that accepts standard OpenAI
 
 Example:
 ```bash
-curl http://localhost:3134/v1/chat/completions \
+curl http://localhost:3133/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{"model":"lifequery","messages":[{"role":"user","content":"When did I go to Vegas?"}],"stream":false}'
 ```

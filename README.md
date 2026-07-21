@@ -87,8 +87,7 @@ Go to `http://localhost:3133`, then open **Settings** to enter your Ollama URL a
 
 | Service  | Host Port | Description                     |
 |----------|-----------|---------------------------------|
-| Frontend | 3133      | Web UI (React, served by nginx) |
-| Backend  | 3134      | REST/SSE API (FastAPI)          |
+| LifeQuery | 3133     | Web UI, REST/SSE API, and OpenAI-compatible API |
 
 ---
 
@@ -131,7 +130,7 @@ Go to **Settings → Chat Inference** to choose a provider:
 
 ## OpenAI-compatible API
 
-LifeQuery exposes `/v1/chat/completions` compatible with any OpenAI client. Set base URL to `http://localhost:3134/v1`.
+LifeQuery exposes `/v1/chat/completions` compatible with any OpenAI client. Set base URL to `http://localhost:3133/v1`.
 
 ## Agent API
 
@@ -139,7 +138,7 @@ LifeQuery also exposes a filtered, authenticated OpenAPI surface for agent
 connectors such as Agent Core:
 
 ```text
-http://localhost:3134/api/agent/openapi.json
+http://localhost:3133/api/agent/openapi.json
 ```
 
 It supports structured retrieval by date range, chat/group, sender/person, and
@@ -161,11 +160,10 @@ source, plus an LLM-backed summary endpoint. See
 
 ```bash
 # View logs
-docker compose logs -f backend
-docker compose logs -f frontend
+docker compose logs -f lifequery
 
 # Check health
-curl http://localhost:3134/api/health
+curl http://localhost:3133/api/health
 
 # Restart services
 docker compose restart
