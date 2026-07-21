@@ -1,0 +1,63 @@
+# =============================================================================
+# LifeQuery - Docker Compose Configuration (Example Template)
+# =============================================================================
+# INSTRUCTIONS:
+# 1. Copy this file to docker-compose.yml
+# 2. Edit the volume paths below to match your local system
+# 3. Run 'docker compose up -d'
+# =============================================================================
+name: lifequery
+
+services:
+  backend:
+    build: ./backend
+    
+    # -------------------------------------------------------------------------
+    # VOLUME MOUNTS
+    # -------------------------------------------------------------------------
+    volumes:
+      # REPLACE '/path/to/your/data' with a real directory on your host machine.
+      # This folder will store your SQLite database and logs.
+      - /path/to/your/data:/app/data
+      
+      # ChromaDB is stored in a separate named volume by default to improve 
+      # performance and avoid file-locking issues on network shares.
+      - lifequery-chroma:/app/data/chroma
+      
+    ports:
+      - "3134:8000"
+      
+    networks:
+      - lifequery_network
+      
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    
+    volumes:
+      - ./frontend/nginx.conf:/etc/nginx/nginx.conf:ro
+
+    ports:
+      - "3133:8080"
+      
+    depends_on:
+      - backend
+      
+    networks:
+      - lifequery_network
+      
+    restart: unless-stopped
+
+# =============================================================================
+# NETWORKS
+# =============================================================================
+networks:
+  lifequery_network:
+    driver: bridge
+
+# =============================================================================
+# VOLUMES
+# =============================================================================
+volumes:
+  lifequery-chroma:
