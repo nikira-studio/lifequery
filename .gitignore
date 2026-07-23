@@ -25,6 +25,12 @@ chroma/
 logs/
 /exports/
 /telegram-exports/
+/imports/
+/uploads/
+/docker_data/
+# Telegram exports are often copied to the repository root for manual import.
+# The app has no root-level JSON source files, so keep every such export local.
+/*.json
 /norfshields-new.json
 *.db
 *.db-shm
@@ -94,6 +100,7 @@ docker-compose.yml
 .env
 .env.local
 .env.*.local
+.nosync
 
 # ============================================
 # OS Files

@@ -5,21 +5,6 @@ A self-hosted, local-first personal memory engine for your Telegram history. Ask
 > See [`docs/USERGUIDE.md`](docs/USERGUIDE.md) for full feature documentation and user guide.
 > See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for technical architecture and design decisions.
 
-<br>
-
-<div align="center">
-  <img src="assets/chat-view.png" alt="LifeQuery Chat Interface" width="800"/>
-  <br><br>
-  <img src="assets/data-dashboard.png" alt="LifeQuery Data Dashboard" width="800"/>
-</div>
-
-<br>
-
-| <img src="assets/settings-panel.png" alt="Settings Panel" /> | <img src="assets/advanced-settings.png" alt="Advanced Settings" /> |
-|---------------------------------------------------------|---------------------------------------------------------------|
-
-<br>
-
 ---
 
 ## What it does
